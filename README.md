@@ -1,5 +1,19 @@
-# FreeScout Sidebar Webhook
+# Caseproof FreeScout Sidebar Webhook
 
+This is a fork of the Free Sidebar Webhook project.
+
+## Javascript execution
+It enhances it adding the ability to execute javascript code contained in the webhook server response, 
+which would be otherwise prevented due to the CSP imposed by Freescout. 
+
+The only thing you need to do is to add a `{{nonce}}` placeholder to the `script` tags that need to be executed. E.g.:
+```html
+<script {{nonce}}>
+...
+</script>
+``` 
+
+# FreeScout Sidebar Webhook
 Sidebar Webhook asynchronously injects HTML from your server into conversation sidebars.
 
 This screenshot shows what it does: you can load any content on a per-customer, per-message basis from your own web server, asynchronously, every time a conversation is loaded on the screen.
