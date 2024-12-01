@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+
+PACKAGE_NAME="fulldecent/freescout-sidebar-webhook"
+ORIGINAL_NAME="SidebarWebhook"
+ORIGINAL_NICENAME="Sidebar Webhook"
+ORIGINAL_ALIAS="sidebarwebhook"
+ORIGINAL_JS_PREFIX="swh"
+
+# To lowercase.
+to_lowercase() {
+    local input="$1"
+    echo "${input,,}"
+}
+
+# To spaced.
+to_spaced() {
+    local input="$1"
+    echo "$input" | sed 's/\([A-Z]\)/ \1/g' | sed 's/^ //'
+}
+
+# Check the module.json exists.
+if [ ! -f "./module.json" ]; then   
+    echo "module.json not found"
+    exit 1
+fi
+
+NAME="$(grep "providers" module.json --after=1 | grep Modules | cut -d'\' -f3)"
+# If empty name exit.
+if [ -z "$NAME" ]; then
+    echo "No module name could be retrieved from module.json"
+    exit 1
+fi
+
+NICENAME="$(grep \"name\":  module.json | cut -d'"' -f 4)"
+ALIAS="$(to_lowercase ${NAME})"
+JS_PREFIX=$ALIAS
+
+if [[ $(uname -s) == "Darwin" ]]; then
+    ioption="-i.scaffoldbackup"
+else
+    ioption="-i"
+fi
+
+# Copy the base module in the tmp folder and use it as template.
+rm -r tmp 2> /dev/null
+mkdir tmp && cp -r ./vendor/${PACKAGE_NAME}/* ./tmp
+
+# Perform substitutions.
+find ./tmp/ -type f -exec sed "$ioption" "s/${ORIGINAL_NICENAME}/${NICENAME}/g" {} \;
+find ./tmp/ -type f -exec sed "$ioption" "s/${ORIGINAL_NAME}/${NAME}/g" {} \;
+find ./tmp/ -type f -exec sed "$ioption" "s/${ORIGINAL_ALIAS}/${ALIAS}/g" {} \;
+# js selectors and functions.
+find ./tmp/ -type f -exec sed $ioption "s/${ORIGINAL_JS_PREFIX}-refresh/${JS_PREFIX}-refresh/g" {} \;
+find ./tmp/ -type f -exec sed $ioption "s/#${ORIGINAL_JS_PREFIX}-/#${JS_PREFIX}-/g" {} \;
+find ./tmp/ -type f -exec sed $ioption "s/id=\"${ORIGINAL_JS_PREFIX}-/id=\"${JS_PREFIX}-/g" {} \;
+find ./tmp/ -type f -exec sed $ioption "s/${ORIGINAL_JS_PREFIX}_load_content/${JS_PREFIX}_load_content/g" {} \;
+
+# Rename files due to the new namespace (psr4).
+find . -type f -name "${ORIGINAL_NAME}*.php" -exec bash -c '
+    for file in "$@"; do
+        base=$(basename "$file")
+        dir=$(dirname "$file")
+        newbase=$(echo "$base" | sed "s/'${ORIGINAL_NAME}'/'${NAME}'/g")
+        mv "$file" "${dir}/${newbase}"
+    done
+' _ {} +
+
+# Move relevant files.
+files_to_copy=$(ls ./tmp --ignore={"*.png","*.json","bin","*.md","LICENSE"})
+(cd ./tmp && cp -rf ${files_to_copy} ../)
+rm -rf ./tmp
