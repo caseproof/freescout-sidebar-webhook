@@ -20,5 +20,8 @@
         "psr-4": {
             "Modules\\SidebarWebhook\\": ""
         }
-    }
+    },
+    "bin": [
+        "bin/build-custom-module"
+    ]    
 }

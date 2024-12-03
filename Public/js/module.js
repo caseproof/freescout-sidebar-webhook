@@ -12,7 +12,10 @@ function swh_load_content() {
 		laroute.route('sidebarwebhook.ajax'),
 		function(response) {
             if (typeof(response.status) != "undefined" && response.status == 'success' && typeof(response.html) != "undefined" && response.html) {
-                $('#swh-content').html(response.html);
+                const cspString = $('meta[http-equiv="Content-Security-Policy"]').attr('content');
+                const nonce = cspString.match(/nonce-([^']+)/)[1];
+
+                $('#swh-content').html(response.html.replace(/{{nonce}}/g, `nonce="${nonce}"`));
 
                 // Find a <title> element inside the response and display it
                 title = $('#swh-content').find('title').first().text();
