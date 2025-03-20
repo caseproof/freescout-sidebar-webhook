@@ -12,7 +12,7 @@
 # to the source file.
 #
 # @see Sync workflow {@link https://github.com/caseproof/org-admin/blob/main/.github/workflows/workflow-keep-alive-sync.yml}
-# @see Workflow template {@link https://github.com/caseproof/org-admin/blob/main/.github/workflow-templates/keep-alive.yml}
+# @see Workflow template {@link https://github.com/caseproof/org-admin/blob/main/.github/templates/workflow/keep-alive.yml}
 #
 ###
 name: Keep Repo Alive
