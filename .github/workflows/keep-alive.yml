@@ -26,12 +26,9 @@ jobs:
 
   keep-alive:
     name: Keep Repo Alive
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-x64
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.IP_REPO_WRITE_PAT }}
-          fetch-depth: 0
       - name: Add keep-alive commit
         run: |
           LAST_COMMIT_TIME=$( git --no-pager log -1 --format=%ct )
