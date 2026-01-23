@@ -1,0 +1,263 @@
+###
+#
+# Auto PR from Dev to Default Branch
+#
+# This workflow automatically creates or updates a pull request from the `dev` branch to the default branch
+# whenever code is committed to the `dev` branch. It extracts GitHub issue references from merged PRs
+# using the GitHub GraphQL API and includes them in the PR body. Only one PR with the title "Pending deployment" will
+# exist at any given time.
+#
+# This workflow file is deployed into this repository via the "Sync Auto PR from Dev to Default Branch Organization File" workflow
+#
+# Direct edits to this file are at risk of being overwritten by the next sync. All edits should be made
+# to the source file.
+#
+# @see Sync workflow {@link https://github.com/caseproof/org-admin/blob/main/.github/workflows/workflow-auto-pr-dev-to-default-sync.yml}
+# @see Workflow template {@link https://github.com/caseproof/org-admin/blob/main/.github/templates/workflow/auto-pr-dev-to-default.yml}
+#
+###
+name: Auto PR from Dev to Default Branch
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+
+jobs:
+  create-or-update-pr:
+    name: Create or Update PR
+    runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-x64
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      BASE_BRANCH: "${{ github.event.repository.default_branch }}"
+      HEAD_BRANCH: "dev"
+      PR_TITLE: "Pending deployment"
+    steps:
+      - uses: runs-on/action@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Extract issue references from merged PRs
+        id: extract-pr-issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          # Keywords that link PRs to issues (case-insensitive)
+          KEYWORDS="close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved"
+
+          # Get all PRs merged into dev (between base and head)
+          # Get merge commits first
+          if git rev-parse --verify "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
+            MERGE_COMMITS=$(git log origin/${BASE_BRANCH}..${HEAD_BRANCH} --merges --pretty=format:"%H" 2>/dev/null || echo "")
+          else
+            MERGE_COMMITS=$(git log --merges --pretty=format:"%H" 2>/dev/null || echo "")
+          fi
+
+          # Use associative arrays to track issues (issue_num -> pr_num)
+          declare -A ISSUE_MAP
+
+          echo "Scanning merge commits between $BASE_BRANCH and $HEAD_BRANCH"
+          if [ -n "$MERGE_COMMITS" ]; then
+            for MERGE_COMMIT in $MERGE_COMMITS; do
+              # Try to find PR number from merge commit message
+              # Handle formats: "Merge pull request #123" or "#123" or "(#123)"
+              COMMIT_MSG=$(git log -1 --format="%B" "$MERGE_COMMIT" 2>/dev/null || echo "")
+              PR_NUM=$(echo "$COMMIT_MSG" | grep -oE '(Merge pull request #|\(#|#)([0-9]+)' | grep -oE '[0-9]+' | head -1 || echo "")
+
+              if [ -n "$PR_NUM" ]; then
+                echo "Processing PR #$PR_NUM from merge commit $MERGE_COMMIT"
+                # Use GraphQL API to get issues that would be closed by this PR
+                # Query format matches user's specification
+                GRAPHQL_QUERY='query getLinkedIssues($owner: String!, $repo: String!, $prNumber: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $prNumber) { number title body closingIssuesReferences(first: 100) { nodes { number body title } } } } }'
+
+                # Create JSON payload with proper types (prNumber must be an integer, not a string)
+                GRAPHQL_PAYLOAD=$(jq -n \
+                  --arg query "$GRAPHQL_QUERY" \
+                  --arg owner "$OWNER" \
+                  --arg repo "$REPO" \
+                  --argjson prNumber "$PR_NUM" \
+                  '{
+                    query: $query,
+                    variables: {
+                      owner: $owner,
+                      repo: $repo,
+                      prNumber: $prNumber
+                    }
+                  }' 2>/dev/null || echo "")
+
+                GRAPHQL_RESULT=$(echo "$GRAPHQL_PAYLOAD" | gh api graphql --input - 2>/dev/null || echo "")
+
+                # Extract issues from closingIssuesReferences and PR body
+                if [ -n "$GRAPHQL_RESULT" ]; then
+                  # Check for errors first
+                  if echo "$GRAPHQL_RESULT" | jq -e '.errors' >/dev/null 2>&1; then
+                    echo "Warning: GraphQL query failed for PR #$PR_NUM" >&2
+                    echo "GraphQL result: $GRAPHQL_RESULT" >&2
+                  else
+                    # Extract issues from closingIssuesReferences
+                    CLOSING_ISSUES=$(echo "$GRAPHQL_RESULT" | jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[]?.number // empty' 2>/dev/null || echo "")
+
+                    if [ -n "$CLOSING_ISSUES" ]; then
+                      CLOSING_COUNT=$(echo "$CLOSING_ISSUES" | wc -l | tr -d ' ')
+                      echo "PR #$PR_NUM has $CLOSING_COUNT issue(s) in closingIssuesReferences"
+                      while IFS= read -r ISSUE_NUM; do
+                        if [ -n "$ISSUE_NUM" ] && [ "$ISSUE_NUM" != "null" ]; then
+                          # Store issue -> PR mapping (use "Closes" as default keyword)
+                          ISSUE_MAP["$ISSUE_NUM"]="$PR_NUM"
+                          echo "  - Found issue #$ISSUE_NUM via closingIssuesReferences"
+                        fi
+                      done <<< "$CLOSING_ISSUES"
+                    fi
+
+                    # Extract PR body from GraphQL result to parse for keyword-linked issues
+                    PR_BODY=$(echo "$GRAPHQL_RESULT" | jq -r '.data.repository.pullRequest.body // empty' 2>/dev/null || echo "")
+
+                    if [ -n "$PR_BODY" ] && [ "$PR_BODY" != "null" ]; then
+                      # Extract issue references with keywords
+                      # Pattern: keyword (case-insensitive) followed by optional colon, optional space, then #issue
+                      MATCHES=$(echo "$PR_BODY" | grep -oiE "($KEYWORDS)[: ]*#[0-9]+" || echo "")
+
+                      if [ -n "$MATCHES" ]; then
+                        KEYWORD_COUNT=$(echo "$MATCHES" | wc -l | tr -d ' ')
+                        echo "PR #$PR_NUM body contains $KEYWORD_COUNT keyword match(es)"
+                        while IFS= read -r match; do
+                          # Extract issue number (the #123 part)
+                          ISSUE_NUM=$(echo "$match" | grep -oE '#[0-9]+' | grep -oE '[0-9]+' | head -1)
+
+                          if [ -n "$ISSUE_NUM" ]; then
+                            # Store issue -> PR mapping (will be deduped later)
+                            if [ -z "${ISSUE_MAP[$ISSUE_NUM]}" ]; then
+                              ISSUE_MAP["$ISSUE_NUM"]="$PR_NUM"
+                              echo "  - Found issue #$ISSUE_NUM via keyword parsing: $match"
+                            else
+                              echo "  - Skipped issue #$ISSUE_NUM (already found via closingIssuesReferences)"
+                            fi
+                          fi
+                        done <<< "$MATCHES"
+                      fi
+                    fi
+                  fi
+                fi
+              fi
+            done
+          fi
+
+          # Format the final list, deduplicated
+          FORMATTED_ISSUES=""
+          ISSUE_COUNT=0
+          for ISSUE_NUM in $(printf '%s\n' "${!ISSUE_MAP[@]}" | sort -n); do
+            PR_NUM="${ISSUE_MAP[$ISSUE_NUM]}"
+            FORMATTED_ISSUES="${FORMATTED_ISSUES}- Closes #${ISSUE_NUM} (via #${PR_NUM})\n"
+            ISSUE_COUNT=$((ISSUE_COUNT + 1))
+          done
+
+          # Count merge commits
+          MERGE_COUNT=0
+          if [ -n "$MERGE_COMMITS" ]; then
+            MERGE_COUNT=$(echo "$MERGE_COMMITS" | wc -l | tr -d ' ')
+          fi
+
+          if [ -n "$FORMATTED_ISSUES" ]; then
+            echo "pr_issues<<EOF" >> $GITHUB_OUTPUT
+            echo -e "$FORMATTED_ISSUES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "has_issues=true" >> $GITHUB_OUTPUT
+            echo "Found $ISSUE_COUNT unique issue(s) from $MERGE_COUNT merge commit(s)"
+            echo "Issues found: $(printf '%s\n' "${!ISSUE_MAP[@]}" | sort -n | tr '\n' ' ')"
+          else
+            echo "pr_issues=" >> $GITHUB_OUTPUT
+            echo "has_issues=false" >> $GITHUB_OUTPUT
+            echo "No issues found in merged PRs (checked $MERGE_COUNT merge commit(s))"
+          fi
+
+      - name: Check for existing PR
+        id: check-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Search for existing PR with the title
+          EXISTING_PR=$(gh pr list --base "$BASE_BRANCH" --head "$HEAD_BRANCH" --state open --json number,title --jq '.[] | select(.title == "'"$PR_TITLE"'") | .number' || echo "")
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
+            echo "pr_exists=true" >> $GITHUB_OUTPUT
+            echo "Found existing PR #$EXISTING_PR"
+          else
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            echo "pr_exists=false" >> $GITHUB_OUTPUT
+            echo "No existing PR found, will create new one"
+          fi
+
+
+      - name: Build PR body
+        id: pr-body
+        run: |
+          HAS_ISSUES="${{ steps.extract-pr-issues.outputs.has_issues }}"
+          ISSUES="${{ steps.extract-pr-issues.outputs.pr_issues }}"
+
+          BODY="This pull request contains pending changes from the \`dev\` branch ready for deployment to production."
+
+          if [ "$HAS_ISSUES" = "true" ] && [ -n "$ISSUES" ]; then
+            BODY="$BODY\n\n**Related Issues:**\n$ISSUES"
+          fi
+
+          BODY="$BODY\n\n---\n*This PR was automatically created by GitHub Actions.*"
+
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "PR body built: has_issues=$HAS_ISSUES"
+          echo "PR body preview:"
+          echo -e "$BODY" | head -20
+
+      - name: Create or Update PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ steps.pr-body.outputs.body }}
+        run: |
+          PR_EXISTS="${{ steps.check-pr.outputs.pr_exists }}"
+          PR_NUMBER="${{ steps.check-pr.outputs.pr_number }}"
+          HAS_ERROR=false
+
+          # Write PR body to a temporary file to avoid shell expansion issues
+          PR_BODY_FILE=$(mktemp)
+          printf '%s\n' "$PR_BODY" > "$PR_BODY_FILE"
+
+          if [ "$PR_EXISTS" = "true" ]; then
+            echo "Updating existing PR #$PR_NUMBER"
+            gh pr edit "$PR_NUMBER" --body-file "$PR_BODY_FILE"
+            echo "PR #$PR_NUMBER has been updated"
+            echo "Updated PR #$PR_NUMBER: https://github.com/${{ github.repository }}/pull/$PR_NUMBER"
+          else
+            echo "Creating new PR"
+            NEW_PR_URL=$(gh pr create --base "$BASE_BRANCH" --head "$HEAD_BRANCH" --title "$PR_TITLE" --body-file "$PR_BODY_FILE")
+            NEW_PR=$(echo "$NEW_PR_URL" | grep -oE '[0-9]+$' || echo "")
+
+            if [ -n "$NEW_PR" ]; then
+              echo "Created PR #$NEW_PR: $NEW_PR_URL"
+            else
+                echo "Failed to create PR"
+                HAS_ERROR=true
+            fi
+          fi
+
+          # Clean up.
+          rm -f "$PR_BODY_FILE"
+
+          if [ "$HAS_ERROR" = "true" ]; then
+              exit 1
+          fi
+
+          echo "Step completed successfully"
