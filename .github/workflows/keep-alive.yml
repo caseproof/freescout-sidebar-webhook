@@ -22,13 +22,25 @@ on:
   schedule:
     - cron: '0 0 * * 1'
 
+env:
+  REPO_WRITE_APP_ID: ${{ vars.IP_REPO_WRITE_APP_ID }}
+  REPO_WRITE_APP_PKEY: ${{ secrets.IP_REPO_WRITE_APP_PKEY }}
+  
 jobs:
 
   keep-alive:
     name: Keep Repo Alive
     runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-x64
     steps:
+      - name: Generate repo write app token
+        uses: actions/create-github-app-token@v2
+        id: generate-app-token
+        with:
+          app-id: ${{ env.REPO_WRITE_APP_ID }}
+          private-key: ${{ env.REPO_WRITE_APP_PKEY }}
       - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.generate-app-token.outputs.token }}
       - name: Add keep-alive commit
         run: |
           LAST_COMMIT_TIME=$( git --no-pager log -1 --format=%ct )
