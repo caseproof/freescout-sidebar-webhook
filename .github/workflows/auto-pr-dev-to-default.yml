@@ -30,7 +30,7 @@ jobs:
     runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-x64
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
     env:
       BASE_BRANCH: "${{ github.event.repository.default_branch }}"
       HEAD_BRANCH: "dev"
@@ -222,9 +222,16 @@ jobs:
           echo "PR body preview:"
           echo -e "$BODY" | head -20
 
+      - name: Generate repo write app token
+        uses: actions/create-github-app-token@v2
+        id: generate-app-token
+        with:
+          app-id: ${{ vars.IP_REPO_WRITE_APP_ID }}
+          private-key: ${{ secrets.IP_REPO_WRITE_APP_PKEY }}
+
       - name: Create or Update PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.generate-app-token.outputs.token }}
           PR_BODY: ${{ steps.pr-body.outputs.body }}
         run: |
           PR_EXISTS="${{ steps.check-pr.outputs.pr_exists }}"
