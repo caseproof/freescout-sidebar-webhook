@@ -115,7 +115,7 @@ jobs:
         include: ${{ fromJSON(vars.AI_CODE_REVIEW_MODELS) }}
 
     steps:
-      - uses: runs-on/action@v2
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
 
       - name: Resolve pull request metadata
         id: meta
@@ -133,7 +133,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ steps.meta.outputs.head_sha }}
@@ -212,7 +212,7 @@ jobs:
           test -s "${{ env.REVIEWS_DIR }}/code-review-${{ steps.meta.outputs.review_scope }}-${{ matrix.slug }}.md"
 
       - name: Upload review artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: review-${{ matrix.slug }}
           path: ${{ env.REVIEWS_DIR }}/code-review-${{ steps.meta.outputs.review_scope }}-${{ matrix.slug }}.md
@@ -229,7 +229,7 @@ jobs:
       pull-requests: read
 
     steps:
-      - uses: runs-on/action@v2
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
 
       - name: Resolve pull request metadata
         id: meta
@@ -248,13 +248,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout pull request head
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ steps.meta.outputs.head_sha }}
           fetch-depth: 0
 
       - name: Download review artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         continue-on-error: true
         with:
           pattern: review-*
@@ -411,7 +411,7 @@ jobs:
 
       - name: Upload review artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: code-reviews-${{ steps.meta.outputs.review_scope }}
           path: |
