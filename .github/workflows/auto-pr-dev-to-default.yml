@@ -36,9 +36,9 @@ jobs:
       HEAD_BRANCH: "dev"
       PR_TITLE: "Pending deployment"
     steps:
-      - uses: runs-on/action@v2
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: Configure Git
@@ -223,7 +223,7 @@ jobs:
           echo -e "$BODY" | head -20
 
       - name: Generate repo write app token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         id: generate-app-token
         with:
           app-id: ${{ vars.IP_REPO_WRITE_APP_ID }}
