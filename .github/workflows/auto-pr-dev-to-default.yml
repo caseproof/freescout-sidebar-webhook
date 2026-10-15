@@ -3,9 +3,10 @@
 # Auto PR from Dev to Default Branch
 #
 # This workflow automatically creates or updates a pull request from the `dev` branch to the default branch
-# whenever code is committed to the `dev` branch. It extracts GitHub issue references from merged PRs
-# using the GitHub GraphQL API and includes them in the PR body. Only one PR with the title "Pending deployment" will
-# exist at any given time.
+# whenever code is committed to the `dev` branch. A new pull request gets the `no review` label. An update
+# leaves labels alone, so removing the label and requesting cspf-services still runs a review. It extracts
+# GitHub issue references from merged PRs using the GitHub GraphQL API and includes them in the PR body.
+# Only one PR with the title "Pending deployment" will exist at any given time.
 #
 # This workflow file is deployed into this repository via the "Sync Auto PR from Dev to Default Branch Organization File" workflow
 #
@@ -249,14 +250,14 @@ jobs:
             echo "Updated PR #$PR_NUMBER: https://github.com/${{ github.repository }}/pull/$PR_NUMBER"
           else
             echo "Creating new PR"
-            NEW_PR_URL=$(gh pr create --base "$BASE_BRANCH" --head "$HEAD_BRANCH" --title "$PR_TITLE" --body-file "$PR_BODY_FILE")
+            NEW_PR_URL=$(gh pr create --base "$BASE_BRANCH" --head "$HEAD_BRANCH" --title "$PR_TITLE" --body-file "$PR_BODY_FILE" --label "no review")
             NEW_PR=$(echo "$NEW_PR_URL" | grep -oE '[0-9]+$' || echo "")
 
             if [ -n "$NEW_PR" ]; then
               echo "Created PR #$NEW_PR: $NEW_PR_URL"
             else
-                echo "Failed to create PR"
-                HAS_ERROR=true
+              echo "Failed to create PR"
+              HAS_ERROR=true
             fi
           fi
 
