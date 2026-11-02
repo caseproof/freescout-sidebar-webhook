@@ -6,7 +6,8 @@
 # branch, when this workflow is already present there. A push trigger would not
 # run, because those file commits include [skip ci].
 #
-# The merge commit also includes [skip ci], so pushing to dev does not start
+# Repo-write merges through the GitHub API so GitHub verifies the commit.
+# The merge commit includes [skip ci], so that update does not start
 # "Auto PR from Dev to Default Branch".
 #
 # This workflow file is deployed into this repository via the "Sync Default Branch to Dev Organization File" workflow
@@ -33,8 +34,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  WORKFLOW_MANAGE_APP_ID: ${{ vars.IP_WORKFLOW_MANAGE_APP_ID }}
-  WORKFLOW_MANAGE_APP_PKEY: ${{ secrets.IP_WORKFLOW_MANAGE_APP_PKEY }}
+  REPO_WRITE_APP_ID: ${{ vars.IP_REPO_WRITE_APP_ID }}
+  REPO_WRITE_APP_PKEY: ${{ secrets.IP_REPO_WRITE_APP_PKEY }}
 
 jobs:
   sync:
@@ -42,12 +43,12 @@ jobs:
     runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-x64
     steps:
       - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
-      - name: Generate workflow manage app token
+      - name: Generate repo write app token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         id: app-token
         with:
-          app-id: ${{ env.WORKFLOW_MANAGE_APP_ID }}
-          private-key: ${{ env.WORKFLOW_MANAGE_APP_PKEY }}
+          app-id: ${{ env.REPO_WRITE_APP_ID }}
+          private-key: ${{ env.REPO_WRITE_APP_PKEY }}
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -55,6 +56,7 @@ jobs:
           fetch-depth: 0
       - name: Merge default branch into dev
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           if [ "$DEFAULT_BRANCH" = "dev" ]; then
@@ -67,16 +69,7 @@ jobs:
             exit 0
           fi
 
-          git config user.name github-actions
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git checkout dev
-
-          # actions/checkout points origin/<default> at the commit from
-          # dispatch time when the branch has moved. Fetch the live tips
-          # before merging, or a newer default-branch commit stays off dev.
-          git fetch origin \
-            "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" \
-            "+refs/heads/dev:refs/remotes/origin/dev"
-          git merge "origin/${DEFAULT_BRANCH}" --no-ff -m "Merge ${DEFAULT_BRANCH} into dev [skip ci]"
-          git status
-          git push origin dev
+          gh api --method POST repos/{owner}/{repo}/merges \
+            -f base=dev \
+            -f head="$DEFAULT_BRANCH" \
+            -f commit_message="Merge ${DEFAULT_BRANCH} into dev [skip ci]"
