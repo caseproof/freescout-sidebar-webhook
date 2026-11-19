@@ -210,7 +210,7 @@ jobs:
       - name: Install OpenCode & Caseproof AI Plugins
         uses: caseproof/org-admin/.github/actions/install-opencode@main
         with:
-          openrouter-api-key: ${{ secrets.IP_OPENROUTER_API_KEY }}
+          openrouter-api-key: ${{ secrets.IT_OPENROUTER_API_KEY }}
           repo-token: ${{ steps.plugins-read-token.outputs.token }}
           plugins: devkit
 
@@ -486,7 +486,7 @@ jobs:
       - name: Install OpenCode & Caseproof AI Plugins
         uses: caseproof/org-admin/.github/actions/install-opencode@main
         with:
-          openrouter-api-key: ${{ secrets.IP_OPENROUTER_API_KEY }}
+          openrouter-api-key: ${{ secrets.IT_OPENROUTER_API_KEY }}
           repo-token: ${{ steps.plugins-read-token.outputs.token }}
           plugins: devkit
 
