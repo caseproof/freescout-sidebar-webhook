@@ -227,8 +227,8 @@ jobs:
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         id: generate-app-token
         with:
-          app-id: ${{ vars.IP_REPO_WRITE_APP_ID }}
-          private-key: ${{ secrets.IP_REPO_WRITE_APP_PKEY }}
+          app-id: ${{ vars.IT_REPO_WRITE_APP_ID }}
+          private-key: ${{ secrets.IT_REPO_WRITE_APP_PKEY }}
 
       - name: Create or Update PR
         env:
