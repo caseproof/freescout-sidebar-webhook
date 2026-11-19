@@ -115,7 +115,7 @@ concurrency:
 env:
   REVIEWS_DIR: .caseproof-dev/reviews
   REVIEWER_LOGIN: cspf-services
-  REVIEW_TEAM: "internal-projects"
+  REVIEW_TEAM: "infrastructure"
 
 jobs:
   plan:
