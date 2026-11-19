@@ -34,8 +34,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REPO_WRITE_APP_ID: ${{ vars.IP_REPO_WRITE_APP_ID }}
-  REPO_WRITE_APP_PKEY: ${{ secrets.IP_REPO_WRITE_APP_PKEY }}
+  REPO_WRITE_APP_ID: ${{ vars.IT_REPO_WRITE_APP_ID }}
+  REPO_WRITE_APP_PKEY: ${{ secrets.IT_REPO_WRITE_APP_PKEY }}
 
 jobs:
   sync:
